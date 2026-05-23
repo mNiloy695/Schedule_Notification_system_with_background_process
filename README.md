@@ -76,7 +76,7 @@ Creates a new user account.
 
 ### 2. User Login
 
-Authenticates user credentials and returns JWT Access and Refresh tokens.
+Authenticates user credentials and returns user details along with JWT Access and Refresh tokens.
 
 * **URL:** `/api/accounts/auth/login/`
 * **Method:** `POST`
@@ -93,6 +93,11 @@ Authenticates user credentials and returns JWT Access and Refresh tokens.
 #### Response (200 OK)
 ```json
 {
+  "user": {
+    "id": 1,
+    "email": "user@example.com",
+    "full_name": "John Doe"
+  },
   "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
@@ -120,9 +125,20 @@ Authorization: Bearer <your_access_token>
 }
 ```
 
-#### Response (205 Reset Content)
+#### Responses
+
+##### Success (205 Reset Content)
 ```json
 {
   "detail": "Successfully logged out"
 }
 ```
+
+##### Error (400 Bad Request)
+Returned if the request fails (e.g. invalid or missing refresh token).
+```json
+{
+  "detail": "Something went wrong"
+}
+```
+
