@@ -142,3 +142,129 @@ Returned if the request fails (e.g. invalid or missing refresh token).
 }
 ```
 
+---
+
+### 4. Create Notification
+
+Schedules a new notification. The `schedule_time` must be a future datetime.
+
+* **URL:** `/api/notifications/`
+* **Method:** `POST`
+* **Access:** Authenticated (Requires Bearer Token)
+
+#### Headers
+```http
+Authorization: Bearer <your_access_token>
+```
+
+#### Request Body
+```json
+{
+  "title": "Upcoming Meeting",
+  "message": "Don't forget the weekly sync at 5:00 PM.",
+  "schedule_time": "2026-05-24T17:00:00Z"
+}
+```
+
+#### Responses
+
+##### Success (201 Created)
+```json
+{
+  "notification": {
+    "id": 1,
+    "title": "Upcoming Meeting",
+    "message": "Don't forget the weekly sync at 5:00 PM.",
+    "schedule_time": "2026-05-24T17:00:00Z",
+    "status": "pending",
+    "retry_count": 0,
+    "max_retry": 3,
+    "created_at": "2026-05-23T15:30:00Z",
+    "updated_at": "2026-05-23T15:30:00Z",
+    "created_by": 1
+  }
+}
+```
+
+##### Error (400 Bad Request)
+Returned if validations fail (e.g., `schedule_time` is in the past).
+```json
+{
+  "schedule_time": [
+    "Schedule time must be in future"
+  ]
+}
+```
+
+---
+
+### 5. Get All Notifications
+
+Retrieves a list of all notifications created by the authenticated user, ordered by creation time in descending order.
+
+* **URL:** `/api/notifications/`
+* **Method:** `GET`
+* **Access:** Authenticated (Requires Bearer Token)
+
+#### Headers
+```http
+Authorization: Bearer <your_access_token>
+```
+
+#### Response (200 OK)
+```json
+[
+  {
+    "id": 1,
+    "title": "Upcoming Meeting",
+    "message": "Don't forget the weekly sync at 5:00 PM.",
+    "schedule_time": "2026-05-24T17:00:00Z",
+    "status": "pending",
+    "retry_count": 0,
+    "max_retry": 3,
+    "created_at": "2026-05-23T15:30:00Z",
+    "updated_at": "2026-05-23T15:30:00Z",
+    "created_by": 1
+  }
+]
+```
+
+---
+
+### 6. Get Notification Detail
+
+Retrieves details of a specific notification owned by the authenticated user.
+
+* **URL:** `/api/notifications/<pk>/`
+* **Method:** `GET`
+* **Access:** Authenticated (Requires Bearer Token)
+
+#### Headers
+```http
+Authorization: Bearer <your_access_token>
+```
+
+#### Responses
+
+##### Success (200 OK)
+```json
+{
+  "id": 1,
+  "title": "Upcoming Meeting",
+  "message": "Don't forget the weekly sync at 5:00 PM.",
+  "schedule_time": "2026-05-24T17:00:00Z",
+  "status": "pending",
+  "retry_count": 0,
+  "max_retry": 3,
+  "created_at": "2026-05-23T15:30:00Z",
+  "updated_at": "2026-05-23T15:30:00Z",
+  "created_by": 1
+}
+```
+
+##### Error (404 Not Found)
+```json
+{
+  "detail": "Notification not found"
+}
+```
