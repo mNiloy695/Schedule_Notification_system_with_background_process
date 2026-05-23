@@ -26,7 +26,23 @@ class LoginView(APIView):
             if user:
                 refresh = RefreshToken.for_user(user)
                 return Response({
+                    "user":{
+                        "id": user.id,
+                        "email": user.email,
+                        "full_name": user.full_name,
+                    },
                     "refresh": str(refresh),
-                    "access": str(refresh.access_token),
+                    "access": str(refresh.access_token)
                 })
         return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        try:
+            refresh_token = request.data["refresh"]
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response({"detail": "Successfully logged out"}, status=status.HTTP_205_RESET_CONTENT)
+        except Exception as e:
+            return Response({"detail": "Something went wrong"}, status=status.HTTP_400_BAD_REQUEST)
