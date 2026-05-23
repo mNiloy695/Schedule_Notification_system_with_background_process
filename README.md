@@ -1,59 +1,79 @@
-# 🔔 Notification System API
+# 🔔 Background Job Based Notification System
 
-A lightweight authentication backend built with **Django**, **Django REST Framework (DRF)**, and **SimpleJWT** (JSON Web Tokens). This service handles secure user signup, authentication, and token management (refresh token rotation & blacklisting) for a schedule notification system.
-
----
-
-## 🚀 Getting Started
-
-### 1. Installation
-
-Clone the repository and set up a virtual environment:
-
-```bash
-# Create a virtual environment
-python3 -m venv venv
-
-# Activate the virtual environment
-source venv/bin/activate
-
-# Install required dependencies
-pip install django djangorestframework djangorestframework-simplejwt
-```
-
-### 2. Database Migrations
-
-Apply migrations to initialize the database:
-
-```bash
-python manage.py makemigrations
-python manage.py migrate
-```
-
-### 3. Run the Server
-
-Start the local development server:
-
-```bash
-python manage.py runserver 8089
-```
+A production-grade backend API built with **Django**, **Django REST Framework (DRF)**, **PostgreSQL**, **Redis**, and **Celery** to schedule and deliver notifications asynchronously with automated retries.
 
 ---
 
-## 🔒 API Endpoints Reference
+## 🌟 Features Implemented
+
+1. **User Authentication**: Secure register, login, and logout endpoints powered by JWT (`simplejwt`) with token blacklisting.
+2. **Notification Scheduling**: Post notifications with future schedule times which are processed in the background at the exact time specified.
+3. **Queue & Background processing**: Celery worker integration using Redis as a message broker.
+4. **Resilient Retry Mechanism**: 
+   - Exponential backoff retry logic.
+   - Safe retry termination: Limits to 3 attempts (configurable via `max_retry`) before marking notifications as permanently `failed` to prevent infinite loops.
+5. **On-Demand Retries**: A dedicated endpoint `/api/notifications/<pk>/retry/` to reset and re-run failed notification jobs.
+6. **Robust Validation**: Rejects requests if `schedule_time` is in the past.
+7. **Dockerized Environment**: Built-in Docker and Docker Compose configurations running Python, PostgreSQL, Redis, and Celery.
+
+---
+
+## 📂 Project Architecture
+
+```
+Notification_System/
+├── core/
+│   ├── celery.py         # Celery configuration & instantiation
+│   ├── settings.py       # Decouple-based settings for Postgres, Redis, and DRF
+│   └── urls.py           # Project root URL routing
+├── accounts/             # Registration, login (JWT), and logout views
+├── notifications/
+│   ├── models.py         # Notification model (title, message, status, retry_count)
+│   ├── serializers.py    # Serializers with future schedule_time validation
+│   ├── tasks.py          # Asynchronous delivery task with backoff retry logic
+│   ├── views.py          # Views for list, details, create, and retry notifications
+│   └── urls.py           # App routing
+├── Dockerfile            # Container build specification
+├── docker-compose.yml    # Service orchestration for Postgres, Redis, App, and Celery
+└── requirements.txt      # Python dependencies
+```
+
+---
+
+## ⚡ Quick Start with Docker Compose
+
+Run the entire system (Django, Postgres, Redis, and Celery) with a single command:
+
+### 1. Build and Start Services
+```bash
+docker-compose up --build
+```
+This starts:
+- **`notification_db`**: PostgreSQL (port 5432)
+- **`notification_redis`**: Redis (port 6379)
+- **`notification_web`**: Django API server (port 8000)
+- **`notification_celery`**: Background task worker
+
+### 2. Check Service Logs
+```bash
+docker-compose logs -f
+```
+
+---
+
+## 🔒 API Reference
 
 All requests and responses use the `application/json` content type.
 
-### 1. User Registration
+### Auth Endpoints
 
-Creates a new user account.
-
+#### 1. Register User
 * **URL:** `/api/accounts/auth/register/`
 * **Method:** `POST`
 * **Access:** Public
 
-#### Request Body
 ```json
+// Request Body
 {
   "email": "user@example.com",
   "full_name": "John Doe",
@@ -61,210 +81,102 @@ Creates a new user account.
 }
 ```
 
-#### Response (201 Created)
-```json
-{
-  "user": {
-    "id": 1,
-    "email": "user@example.com",
-    "full_name": "John Doe"
-  }
-}
-```
-
----
-
-### 2. User Login
-
-Authenticates user credentials and returns user details along with JWT Access and Refresh tokens.
-
+#### 2. Login User
 * **URL:** `/api/accounts/auth/login/`
 * **Method:** `POST`
 * **Access:** Public
 
-#### Request Body
 ```json
-{
-  "email": "user@example.com",
-  "password": "SecurePassword123"
-}
-```
-
-#### Response (200 OK)
-```json
+// Response Body (200 OK)
 {
   "user": {
     "id": 1,
     "email": "user@example.com",
     "full_name": "John Doe"
   },
-  "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "refresh": "refresh_token...",
+  "access": "access_token..."
 }
 ```
 
----
-
-### 3. User Logout
-
-Logs the user out by blacklisting the provided refresh token.
-
+#### 3. Logout User
 * **URL:** `/api/accounts/auth/logout/`
 * **Method:** `POST`
-* **Access:** Authenticated (Requires Bearer Token)
+* **Access:** Authenticated (Requires Bearer token in headers)
 
-#### Headers
 ```http
 Authorization: Bearer <your_access_token>
 ```
-
-#### Request Body
 ```json
+// Request Body
 {
-  "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-#### Responses
-
-##### Success (205 Reset Content)
-```json
-{
-  "detail": "Successfully logged out"
-}
-```
-
-##### Error (400 Bad Request)
-Returned if the request fails (e.g. invalid or missing refresh token).
-```json
-{
-  "detail": "Something went wrong"
+  "refresh": "<refresh_token_to_blacklist>"
 }
 ```
 
 ---
 
-### 4. Create Notification
+### Notification Endpoints
 
-Schedules a new notification. The `schedule_time` must be a future datetime.
+Include `Authorization: Bearer <your_access_token>` in headers for all endpoints below.
 
+#### 4. Schedule Notification
 * **URL:** `/api/notifications/`
 * **Method:** `POST`
-* **Access:** Authenticated (Requires Bearer Token)
 
-#### Headers
-```http
-Authorization: Bearer <your_access_token>
-```
-
-#### Request Body
 ```json
+// Request Body
 {
-  "title": "Upcoming Meeting",
-  "message": "Don't forget the weekly sync at 5:00 PM.",
-  "schedule_time": "2026-05-24T17:00:00Z"
+  "title": "Welcome Email",
+  "message": "Welcome to our platform!",
+  "schedule_time": "2026-05-24T18:00:00Z"
 }
 ```
 
-#### Responses
-
-##### Success (201 Created)
 ```json
+// Response Body (201 Created)
 {
   "notification": {
     "id": 1,
-    "title": "Upcoming Meeting",
-    "message": "Don't forget the weekly sync at 5:00 PM.",
-    "schedule_time": "2026-05-24T17:00:00Z",
+    "title": "Welcome Email",
+    "message": "Welcome to our platform!",
+    "schedule_time": "2026-05-24T18:00:00Z",
     "status": "pending",
     "retry_count": 0,
     "max_retry": 3,
     "created_at": "2026-05-23T15:30:00Z",
-    "updated_at": "2026-05-23T15:30:00Z",
-    "created_by": 1
+    "updated_at": "2026-05-23T15:30:00Z"
   }
 }
 ```
-
-##### Error (400 Bad Request)
-Returned if validations fail (e.g., `schedule_time` is in the past).
+* **Validation (400 Bad Request)**: Rejects if `schedule_time` is in the past:
 ```json
 {
-  "schedule_time": [
-    "Schedule time must be in future"
-  ]
+  "error": "Schedule time must be in future"
 }
 ```
 
----
-
-### 5. Get All Notifications
-
-Retrieves a list of all notifications created by the authenticated user, ordered by creation time in descending order.
-
+#### 5. View Notification History
 * **URL:** `/api/notifications/`
 * **Method:** `GET`
-* **Access:** Authenticated (Requires Bearer Token)
+Returns list of all notifications created by the user, ordered by creation date (newest first).
 
-#### Headers
-```http
-Authorization: Bearer <your_access_token>
-```
+#### 6. View Notification Detail
+* **URL:** `/api/notifications/<id>/`
+* **Method:** `GET`
 
-#### Response (200 OK)
-```json
-[
-  {
-    "id": 1,
-    "title": "Upcoming Meeting",
-    "message": "Don't forget the weekly sync at 5:00 PM.",
-    "schedule_time": "2026-05-24T17:00:00Z",
-    "status": "pending",
-    "retry_count": 0,
-    "max_retry": 3,
-    "created_at": "2026-05-23T15:30:00Z",
-    "updated_at": "2026-05-23T15:30:00Z",
-    "created_by": 1
-  }
-]
-```
+#### 7. Retry Failed Notification
+* **URL:** `/api/notifications/<id>/retry/`
+* **Method:** `POST`
+Resets the status of a permanently failed notification (`"status": "failed"`) back to `pending`, resets the retry counter to `0`, and immediately re-enqueues it in Celery.
 
 ---
 
-### 6. Get Notification Detail
+##  Queue & Job Architecture Design
 
-Retrieves details of a specific notification owned by the authenticated user.
-
-* **URL:** `/api/notifications/<pk>/`
-* **Method:** `GET`
-* **Access:** Authenticated (Requires Bearer Token)
-
-#### Headers
-```http
-Authorization: Bearer <your_access_token>
-```
-
-#### Responses
-
-##### Success (200 OK)
-```json
-{
-  "id": 1,
-  "title": "Upcoming Meeting",
-  "message": "Don't forget the weekly sync at 5:00 PM.",
-  "schedule_time": "2026-05-24T17:00:00Z",
-  "status": "pending",
-  "retry_count": 0,
-  "max_retry": 3,
-  "created_at": "2026-05-23T15:30:00Z",
-  "updated_at": "2026-05-23T15:30:00Z",
-  "created_by": 1
-}
-```
-
-##### Error (404 Not Found)
-```json
-{
-  "detail": "Notification not found"
-}
-```
+1. **Future Scheduling (`eta`)**: When a notification is created, it is scheduled in Celery with an `eta` value set to `schedule_time`. The message resides in the Redis broker until the scheduled time, when the worker retrieves and runs it.
+2. **Handling Job Failures & Retries**: 
+   - A mock transmission is executed inside `send_notification_task`.
+   - If transmission fails (e.g. timeout, SMTP error), the exception is caught, `retry_count` is incremented.
+   - If `retry_count` < `max_retry` (3), Celery re-queues the task with a backoff delay (`15 * retry_count` seconds).
+   - If `retry_count` reaches 3, the notification status is set to `failed`, preventing infinite retries.
